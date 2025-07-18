@@ -1,0 +1,16 @@
+2025-07-17 23:39:40 | INFO     | app.main:<module>:51 | 🚀 Iniciando API de Reconhecimento Facial
+2025-07-17 23:39:40 | INFO     | app.main:<module>:52 | 📋 Configurações: DEBUG=False, TOLERANCE=0.6
+2025-07-17 23:39:40 | INFO     | app.main:startup_event:296 | 🎬 API inicializada com sucesso!
+2025-07-17 23:39:40 | INFO     | app.main:startup_event:297 | 🌐 Documentação disponível em: /docs
+2025-07-17 23:39:40 | INFO     | app.main:startup_event:298 | 🔍 Health check disponível em: /health
+2025-07-17 23:39:40 | INFO     | app.main:startup_event:299 | 📊 Estatísticas disponíveis em: /api/v1/statistics
+2025-07-17 23:39:50 | INFO     | app.main:log_requests:118 | 📨 Requisição recebida: GET /health de 127.0.0.1 | User-Agent: Mozilla/5.0 (Windows NT; Windows NT 10.0; pt-BR) W...
+2025-07-17 23:39:50 | INFO     | app.main:log_requests:141 | ⚠️ Resposta enviada: GET /health | Status: 400 | Tempo: 0.0005s
+2025-07-17 23:39:57 | INFO     | app.main:log_requests:118 | 📨 Requisição recebida: GET /health de 127.0.0.1 | User-Agent: Mozilla/5.0 (Windows NT; Windows NT 10.0; pt-BR) W...
+2025-07-17 23:39:57 | INFO     | app.main:log_requests:141 | ⚠️ Resposta enviada: GET /health | Status: 400 | Tempo: 0.0003s
+2025-07-17 23:40:40 | INFO     | app.main:log_requests:118 | 📨 Requisição recebida: GET /docs de 127.0.0.1 | User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2025-07-17 23:40:40 | INFO     | app.main:log_requests:141 | ⚠️ Resposta enviada: GET /docs | Status: 400 | Tempo: 0.0004s
+2025-07-17 23:40:40 | INFO     | app.main:log_requests:118 | 📨 Requisição recebida: GET /favicon.ico de 127.0.0.1 | User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWeb...
+2025-07-17 23:40:40 | INFO     | app.main:log_requests:141 | ⚠️ Resposta enviada: GET /favicon.ico | Status: 400 | Tempo: 0.0009s
+2025-07-17 23:41:24 | INFO     | app.main:log_requests:118 | 📨 Requisição recebida: GET / de 127.0.0.1 | User-Agent: Mozilla/5.0 (Windows NT; Windows NT 10.0; pt-BR) W...
+2025-07-17 23:41:24 | INFO     | app.main:log_requests:141 | ⚠️ Resposta enviada: GET / | Status: 400 | Tempo: 0.0003s

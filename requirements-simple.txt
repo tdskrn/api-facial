@@ -1,0 +1,16 @@
+# Versão simplificada para testes (sem reconhecimento facial)
+# Use para testar a estrutura da API
+
+# FastAPI e dependências core
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+pydantic-settings==2.0.3
+
+# Básico para funcionamento
+python-dotenv==1.0.0
+aiofiles==23.2.1
+loguru==0.7.2
+
+# Para simular imports ausentes (mock)
+# Remova face_recognition, cv2, numpy dos imports para testar 
