@@ -56,7 +56,7 @@ def create_directories():
     
     for directory in directories:
         os.makedirs(directory, exist_ok=True)
-        print(f"📁 Diretório criado/verificado: {directory}")
+        print(f"[DIR] Diretorio criado/verificado: {directory}")
 
 # Executar criação de diretórios ao importar
 create_directories() 

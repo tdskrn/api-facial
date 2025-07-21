@@ -6,14 +6,21 @@ import aiofiles
 from loguru import logger
 from datetime import datetime
 
+# Importar serviço facial com fallback inteligente
 try:
-    # Tentar importar serviço real primeiro
     from app.services.facial_service import facial_service
-    print("✅ Usando serviço facial REAL")
+    SERVICE_MODE = "real" if facial_service.facial_recognition_available else "limited"
+    logger.info(f"✅ Serviço facial carregado em modo: {SERVICE_MODE}")
 except ImportError as e:
-    # Se falhar, usar versão simulada
-    from app.services.facial_service_mock import facial_service
-    print("⚠️ Usando serviço facial SIMULADO (algumas dependências ausentes)")
+    # Fallback para versão mock se houver erro crítico
+    logger.warning(f"⚠️ Erro ao carregar serviço facial: {e}")
+    try:
+        from app.services.facial_service_mock import facial_service
+        SERVICE_MODE = "mock"
+        logger.info("🎭 Usando serviço facial MOCK como fallback")
+    except ImportError as e2:
+        logger.error(f"❌ Erro crítico: não foi possível carregar nenhum serviço facial: {e2}")
+        raise RuntimeError("Nenhum serviço facial disponível")
 from app.config import settings
 from app.models.employee import FacialVerificationResult, FacialRegistrationResult
 
@@ -363,6 +370,36 @@ async def get_system_statistics():
         raise HTTPException(status_code=500, detail="Erro interno do servidor")
 
 @router.get(
+    "/service-info",
+    summary="Informações do serviço",
+    description="Retorna informações detalhadas sobre o modo de operação do serviço facial"
+)
+async def get_service_info():
+    """
+    Retorna informações sobre o modo de operação do serviço facial
+    """
+    try:
+        return {
+            "service_mode": SERVICE_MODE,
+            "facial_recognition_available": getattr(facial_service, 'facial_recognition_available', False),
+            "capabilities": {
+                "real_face_detection": SERVICE_MODE == "real" and getattr(facial_service, 'facial_recognition_available', False),
+                "face_encoding": SERVICE_MODE == "real" and getattr(facial_service, 'facial_recognition_available', False),
+                "similarity_calculation": SERVICE_MODE == "real" and getattr(facial_service, 'facial_recognition_available', False),
+                "image_storage": True,
+                "basic_validation": True
+            },
+            "recommendations": {
+                "install_dependencies": SERVICE_MODE != "real",
+                "command": "pip install face-recognition opencv-python-headless numpy" if SERVICE_MODE != "real" else None
+            },
+            "checked_at": datetime.now().isoformat()
+        }
+    except Exception as e:
+        logger.error(f"❌ Erro ao obter informações do serviço: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno do servidor")
+
+@router.get(
     "/health",
     summary="Verificação de saúde",
     description="Endpoint para verificar se o serviço de reconhecimento facial está funcionando"
@@ -382,15 +419,30 @@ async def health_check():
         storage_ok = os.path.exists(settings.STORAGE_PATH)
         temp_ok = os.path.exists(settings.TEMP_PATH)
         
+        # Status geral baseado no modo do serviço
+        if SERVICE_MODE == "real" and getattr(facial_service, 'facial_recognition_available', False):
+            service_status = "fully_operational"
+            service_emoji = "🎯"
+        elif SERVICE_MODE == "limited":
+            service_status = "limited_functionality"
+            service_emoji = "⚠️"
+        else:
+            service_status = "simulation_mode"
+            service_emoji = "🎭"
+        
         return {
             "status": "healthy",
             "service": "facial_recognition",
+            "service_mode": SERVICE_MODE,
+            "service_status": service_status,
+            "service_emoji": service_emoji,
             "version": settings.APP_VERSION,
             "tolerance": settings.FACE_TOLERANCE,
             "storage_available": storage_ok,
             "temp_available": temp_ok,
             "max_file_size_mb": settings.MAX_FILE_SIZE // (1024 * 1024),
             "allowed_extensions": list(settings.ALLOWED_EXTENSIONS),
+            "facial_recognition_available": getattr(facial_service, 'facial_recognition_available', False),
             "checked_at": datetime.now().isoformat()
         }
         
