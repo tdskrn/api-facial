@@ -21,6 +21,78 @@ THRESHOLD = 0.6  # Limiar para considerar match
 REQUEST_TIMEOUT = 10  # Timeout para download de imagens (segundos)
 MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB
 
+def get_reference_image_from_laravel_api(employee_id, laravel_api_base, api_token=None):
+    """
+    Busca a imagem de referência via API Laravel
+    
+    Args:
+        employee_id (str): ID do funcionário
+        laravel_api_base (str): URL base da API Laravel
+        api_token (str): Token de autenticação (opcional)
+        
+    Returns:
+        numpy.ndarray: Imagem carregada ou None em caso de erro
+    """
+    try:
+        # Construir URL da API Laravel
+        api_url = f"{laravel_api_base}/api/employee/{employee_id}/photo"
+        
+        logger.info(f"📞 Buscando foto do funcionário {employee_id} via Laravel API: {api_url}")
+        
+        # Headers para a requisição
+        headers = {
+            'User-Agent': 'API-Facial-Recognition/1.0',
+            'Accept': 'application/json',
+            'Content-Type': 'application/json'
+        }
+        
+        # Adicionar token de autenticação se fornecido
+        if api_token:
+            headers['Authorization'] = f'Bearer {api_token}'
+        
+        # Fazer requisição para API Laravel
+        response = requests.get(
+            api_url,
+            headers=headers,
+            timeout=REQUEST_TIMEOUT
+        )
+        
+        if response.status_code == 404:
+            logger.warning(f"⚠️ Funcionário {employee_id} não encontrado na API Laravel")
+            return None
+        elif response.status_code == 401:
+            logger.error(f"❌ Não autorizado para acessar API Laravel (token inválido?)")
+            return None
+        elif response.status_code != 200:
+            logger.error(f"❌ Erro HTTP {response.status_code} na API Laravel: {response.text}")
+            return None
+        
+        # Processar resposta JSON
+        try:
+            data = response.json()
+        except ValueError as e:
+            logger.error(f"❌ Resposta inválida da API Laravel: {e}")
+            return None
+        
+        # Extrair URL da imagem da resposta
+        image_url = data.get('photo_url') or data.get('image_url') or data.get('url')
+        
+        if not image_url:
+            logger.error(f"❌ URL da imagem não encontrada na resposta da API Laravel: {data}")
+            return None
+        
+        logger.info(f"📥 URL da imagem obtida: {image_url}")
+        
+        # Baixar a imagem usando a URL obtida
+        return load_image_from_url(image_url)
+        
+    except requests.RequestException as e:
+        logger.error(f"❌ Erro de rede ao acessar API Laravel: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"❌ Erro inesperado ao buscar imagem via Laravel API: {e}")
+        return None
+
 def load_image_from_url(url):
     """
     Carrega uma imagem a partir de uma URL
@@ -192,6 +264,54 @@ def load_image_from_base64(b64_string):
         logger.error(f"❌ Erro inesperado ao carregar imagem base64: {e}")
         return None
 
+def compare_faces_with_laravel_api(employee_id, captured_b64, laravel_api_base, api_token=None):
+    """
+    Compara imagem capturada com imagem de referência obtida via API Laravel
+    
+    Args:
+        employee_id (str): ID do funcionário
+        captured_b64 (str): Imagem capturada em formato base64
+        laravel_api_base (str): URL base da API Laravel
+        api_token (str): Token de autenticação (opcional)
+        
+    Returns:
+        dict: Resultado da comparação
+        {
+            "success": bool,
+            "match": bool,
+            "confidence": float,
+            "reason": str (opcional)
+        }
+    """
+    try:
+        logger.info(f"🔍 Iniciando comparação facial para funcionário {employee_id}")
+        
+        # Buscar imagem de referência via API Laravel
+        reference_img = get_reference_image_from_laravel_api(employee_id, laravel_api_base, api_token)
+        if reference_img is None:
+            return {
+                "success": False,
+                "reason": "Não foi possível obter a imagem de referência do funcionário"
+            }
+        
+        # Carregar imagem capturada
+        captured_img = load_image_from_base64(captured_b64)
+        if captured_img is None:
+            return {
+                "success": False,
+                "reason": "Não foi possível processar a imagem capturada"
+            }
+        
+        # Realizar comparação facial
+        return perform_face_comparison(reference_img, captured_img)
+        
+    except Exception as e:
+        logger.error(f"❌ Erro inesperado na comparação via Laravel API: {e}")
+        return {
+            "success": False,
+            "reason": f"Erro interno: {str(e)}"
+        }
+
 def compare_faces(reference_url, captured_b64):
     """
     Compara duas imagens faciais: uma de referência (URL) e uma capturada (base64)
@@ -229,6 +349,34 @@ def compare_faces(reference_url, captured_b64):
                 "reason": "Não foi possível processar a imagem capturada"
             }
         
+        # Realizar comparação facial
+        return perform_face_comparison(reference_img, captured_img)
+        
+    except ImportError as e:
+        logger.error(f"❌ Dependência não encontrada: {e}")
+        return {
+            "success": False,
+            "reason": "Bibliotecas de reconhecimento facial não estão instaladas"
+        }
+    except Exception as e:
+        logger.error(f"❌ Erro inesperado na comparação: {e}")
+        return {
+            "success": False,
+            "reason": f"Erro interno: {str(e)}"
+        }
+
+def perform_face_comparison(reference_img, captured_img):
+    """
+    Realiza a comparação facial entre duas imagens já carregadas
+    
+    Args:
+        reference_img (numpy.ndarray): Imagem de referência
+        captured_img (numpy.ndarray): Imagem capturada
+        
+    Returns:
+        dict: Resultado da comparação
+    """
+    try:
         # Extrair encodings faciais da imagem de referência
         logger.debug("🔍 Extraindo encoding da imagem de referência...")
         ref_encodings = face_recognition.face_encodings(reference_img)
@@ -284,17 +432,11 @@ def compare_faces(reference_url, captured_b64):
             "threshold": THRESHOLD
         }
         
-    except ImportError as e:
-        logger.error(f"❌ Dependência não encontrada: {e}")
-        return {
-            "success": False,
-            "reason": "Bibliotecas de reconhecimento facial não estão instaladas"
-        }
     except Exception as e:
-        logger.error(f"❌ Erro inesperado na comparação: {e}")
+        logger.error(f"❌ Erro na comparação facial: {e}")
         return {
             "success": False,
-            "reason": f"Erro interno: {str(e)}"
+            "reason": f"Erro na comparação: {str(e)}"
         }
 
 def set_threshold(new_threshold):

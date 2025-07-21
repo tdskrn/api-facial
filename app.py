@@ -8,7 +8,7 @@ import os
 import logging
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from utils.face_matcher import compare_faces
+from utils.face_matcher import compare_faces_with_laravel_api
 
 # Configuração de logging
 logging.basicConfig(
@@ -34,7 +34,8 @@ CORS(app, origins="*")
 # Configurações da aplicação
 app.config.update(
     SECRET_KEY=os.getenv('SECRET_KEY', 'sua-chave-secreta-super-forte-aqui'),
-    BASE_URL=os.getenv('BASE_URL', 'https://seudominio.com/storage/funcionarios'),
+    LARAVEL_API_BASE=os.getenv('LARAVEL_API_BASE', 'https://meusite-laravel.com.br'),
+    LARAVEL_API_TOKEN=os.getenv('LARAVEL_API_TOKEN', None),
     DEBUG=os.getenv('DEBUG', 'False').lower() == 'true',
     MAX_CONTENT_LENGTH=10 * 1024 * 1024  # 10MB max file size
 )
@@ -51,6 +52,10 @@ def root():
         "endpoints": {
             "validate": "/api/validate",
             "health": "/health"
+        },
+        "laravel_integration": {
+            "api_base": app.config['LARAVEL_API_BASE'],
+            "authenticated": bool(app.config['LARAVEL_API_TOKEN'])
         },
         "documentation": "https://github.com/seu-usuario/facial-api"
     })
@@ -73,7 +78,8 @@ def health():
             },
             "configuration": {
                 "debug": app.config['DEBUG'],
-                "base_url": app.config['BASE_URL']
+                "laravel_api": app.config['LARAVEL_API_BASE'],
+                "authenticated": bool(app.config['LARAVEL_API_TOKEN'])
             }
         })
     except Exception as e:
@@ -143,11 +149,17 @@ def validate():
         # Log da requisição
         logger.info(f"📨 Validação facial solicitada para funcionário: {employee_id}")
         
-        # Construir URL da imagem de referência
-        reference_url = f"{app.config['BASE_URL']}/{employee_id}.jpg"
+        # Obter configurações Laravel
+        laravel_api_base = app.config['LARAVEL_API_BASE']
+        laravel_api_token = app.config['LARAVEL_API_TOKEN']
         
-        # Realizar comparação facial
-        result = compare_faces(reference_url, image_base64)
+        # Realizar comparação facial via API Laravel
+        result = compare_faces_with_laravel_api(
+            employee_id, 
+            image_base64, 
+            laravel_api_base, 
+            laravel_api_token
+        )
         
         # Log do resultado
         if result.get('success'):
@@ -213,7 +225,8 @@ def log_response(response):
 
 if __name__ == '__main__':
     logger.info("🚀 Iniciando API de Reconhecimento Facial")
-    logger.info(f"🌐 Base URL para imagens: {app.config['BASE_URL']}")
+    logger.info(f"🌐 Laravel API: {app.config['LARAVEL_API_BASE']}")
+    logger.info(f"🔐 Token configurado: {'Sim' if app.config['LARAVEL_API_TOKEN'] else 'Não'}")
     logger.info(f"🔧 Debug mode: {app.config['DEBUG']}")
     
     # Executar aplicação

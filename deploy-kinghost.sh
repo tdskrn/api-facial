@@ -95,9 +95,16 @@ copy_project_files() {
 # Configurações da API de Reconhecimento Facial
 DEBUG=false
 SECRET_KEY=$(openssl rand -hex 32)
-BASE_URL=https://seudominio.com/storage/funcionarios
 PORT=8000
 ENVIRONMENT=production
+
+# Integração com Laravel (OBRIGATÓRIO - CONFIGURE ANTES DE USAR)
+LARAVEL_API_BASE=https://meusite-laravel.com.br
+LARAVEL_API_TOKEN=
+
+# Reconhecimento facial
+FACE_TOLERANCE=0.6
+MAX_FILE_SIZE=10485760
 
 # Logs
 LOG_LEVEL=INFO
