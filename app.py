@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
 🧠 API de Reconhecimento Facial para Ponto Eletrônico
-Versão Flask para deploy em VPS KingHost
+Recebe duas imagens em base64 e retorna resultado da comparação facial
 """
 
 import os
 import logging
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from utils.face_matcher import compare_faces_with_laravel_api
+from utils.face_matcher import compare_two_images
 
 # Configuração de logging
 logging.basicConfig(
@@ -34,10 +34,9 @@ CORS(app, origins="*")
 # Configurações da aplicação
 app.config.update(
     SECRET_KEY=os.getenv('SECRET_KEY', 'sua-chave-secreta-super-forte-aqui'),
-    LARAVEL_API_BASE=os.getenv('LARAVEL_API_BASE', 'https://meusite-laravel.com.br'),
-    LARAVEL_API_TOKEN=os.getenv('LARAVEL_API_TOKEN', None),
     DEBUG=os.getenv('DEBUG', 'False').lower() == 'true',
-    MAX_CONTENT_LENGTH=10 * 1024 * 1024  # 10MB max file size
+    MAX_CONTENT_LENGTH=20 * 1024 * 1024,  # 20MB max (duas imagens)
+    FACE_TOLERANCE=float(os.getenv('FACE_TOLERANCE', '0.6'))
 )
 
 @app.route('/', methods=['GET'])
@@ -47,15 +46,16 @@ def root():
     """
     return jsonify({
         "message": "🧠 API de Reconhecimento Facial para Ponto Eletrônico",
-        "version": "1.0.0",
+        "version": "2.0.0",
         "status": "online",
         "endpoints": {
-            "validate": "/api/validate",
+            "compare": "/api/compare",
             "health": "/health"
         },
-        "laravel_integration": {
-            "api_base": app.config['LARAVEL_API_BASE'],
-            "authenticated": bool(app.config['LARAVEL_API_TOKEN'])
+        "features": {
+            "direct_comparison": True,
+            "max_file_size_mb": app.config['MAX_CONTENT_LENGTH'] // (1024 * 1024),
+            "face_tolerance": app.config['FACE_TOLERANCE']
         },
         "documentation": "https://github.com/seu-usuario/facial-api"
     })
@@ -78,8 +78,8 @@ def health():
             },
             "configuration": {
                 "debug": app.config['DEBUG'],
-                "laravel_api": app.config['LARAVEL_API_BASE'],
-                "authenticated": bool(app.config['LARAVEL_API_TOKEN'])
+                "face_tolerance": app.config['FACE_TOLERANCE'],
+                "max_file_size_mb": app.config['MAX_CONTENT_LENGTH'] // (1024 * 1024)
             }
         })
     except Exception as e:
@@ -89,22 +89,25 @@ def health():
             "error": str(e)
         }), 500
 
-@app.route('/api/validate', methods=['POST'])
-def validate():
+@app.route('/api/compare', methods=['POST'])
+def compare():
     """
-    Endpoint principal para validação facial
+    Endpoint para comparação facial entre duas imagens
     
     Request JSON:
     {
-        "employee_id": "123",
-        "image_base64": "data:image/jpeg;base64,/9j/4AAQSkZ..."
+        "reference_image": "data:image/jpeg;base64,/9j/4AAQSkZ...",
+        "captured_image": "data:image/jpeg;base64,/9j/4AAQSkZ...",
+        "employee_id": "123" (opcional, apenas para log)
     }
     
     Response JSON:
     {
         "success": true,
         "match": true,
-        "confidence": 0.92
+        "confidence": 0.92,
+        "distance": 0.08,
+        "threshold": 0.6
     }
     """
     try:
@@ -124,55 +127,53 @@ def validate():
                 "error": "JSON inválido ou vazio"
             }), 400
         
-        employee_id = data.get('employee_id')
-        image_base64 = data.get('image_base64')
+        reference_image = data.get('reference_image')
+        captured_image = data.get('captured_image')
+        employee_id = data.get('employee_id', 'unknown')  # Opcional
         
-        if not employee_id:
+        if not reference_image:
             return jsonify({
                 "success": False,
-                "error": "Campo 'employee_id' é obrigatório"
+                "error": "Campo 'reference_image' é obrigatório"
             }), 400
         
-        if not image_base64:
+        if not captured_image:
             return jsonify({
                 "success": False,
-                "error": "Campo 'image_base64' é obrigatório"
+                "error": "Campo 'captured_image' é obrigatório"
             }), 400
         
-        # Validar formato base64
-        if not image_base64.startswith('data:image/'):
-            return jsonify({
-                "success": False,
-                "error": "Formato de imagem inválido. Use data:image/jpeg;base64,..."
-            }), 400
+        # Validar formato base64 das imagens
+        for field, image in [('reference_image', reference_image), ('captured_image', captured_image)]:
+            if not image.startswith('data:image/'):
+                return jsonify({
+                    "success": False,
+                    "error": f"Campo '{field}' tem formato inválido. Use data:image/jpeg;base64,..."
+                }), 400
         
         # Log da requisição
-        logger.info(f"📨 Validação facial solicitada para funcionário: {employee_id}")
+        logger.info(f"📨 Comparação facial solicitada para funcionário: {employee_id}")
         
-        # Obter configurações Laravel
-        laravel_api_base = app.config['LARAVEL_API_BASE']
-        laravel_api_token = app.config['LARAVEL_API_TOKEN']
-        
-        # Realizar comparação facial via API Laravel
-        result = compare_faces_with_laravel_api(
-            employee_id, 
-            image_base64, 
-            laravel_api_base, 
-            laravel_api_token
+        # Realizar comparação facial
+        result = compare_two_images(
+            reference_image, 
+            captured_image,
+            app.config['FACE_TOLERANCE']
         )
         
         # Log do resultado
         if result.get('success'):
             match_status = "✅ MATCH" if result.get('match') else "❌ NO MATCH"
             confidence = result.get('confidence', 0)
-            logger.info(f"🎯 Resultado para {employee_id}: {match_status} (confiança: {confidence:.2f})")
+            distance = result.get('distance', 0)
+            logger.info(f"🎯 Resultado para {employee_id}: {match_status} (confiança: {confidence:.3f}, distância: {distance:.4f})")
         else:
-            logger.warning(f"⚠️ Erro na validação para {employee_id}: {result.get('reason', 'Erro desconhecido')}")
+            logger.warning(f"⚠️ Erro na comparação para {employee_id}: {result.get('reason', 'Erro desconhecido')}")
         
         return jsonify(result)
         
     except Exception as e:
-        logger.error(f"💥 Erro interno na validação: {e}")
+        logger.error(f"💥 Erro interno na comparação: {e}")
         return jsonify({
             "success": False,
             "error": "Erro interno do servidor",
@@ -184,7 +185,7 @@ def not_found(error):
     """Handler para rotas não encontradas"""
     return jsonify({
         "error": "Endpoint não encontrado",
-        "available_endpoints": ["/", "/health", "/api/validate"]
+        "available_endpoints": ["/", "/health", "/api/compare"]
     }), 404
 
 @app.errorhandler(405)
@@ -225,8 +226,9 @@ def log_response(response):
 
 if __name__ == '__main__':
     logger.info("🚀 Iniciando API de Reconhecimento Facial")
-    logger.info(f"🌐 Laravel API: {app.config['LARAVEL_API_BASE']}")
-    logger.info(f"🔐 Token configurado: {'Sim' if app.config['LARAVEL_API_TOKEN'] else 'Não'}")
+    logger.info(f"🎯 Endpoint principal: /api/compare")
+    logger.info(f"⚙️ Face tolerance: {app.config['FACE_TOLERANCE']}")
+    logger.info(f"📦 Max file size: {app.config['MAX_CONTENT_LENGTH'] // (1024 * 1024)}MB")
     logger.info(f"🔧 Debug mode: {app.config['DEBUG']}")
     
     # Executar aplicação
